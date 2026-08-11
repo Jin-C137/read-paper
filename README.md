@@ -4,7 +4,7 @@ A [Claude Code](https://claude.com/claude-code) skill that turns a research pape
 
 Every symbol in every equation is color-coded by its role — decision variable, known parameter, random parameter, derived quantity, dual variable — glossed before it first appears, and followed by a plain-language note on what the equation *does*, not what it says. Equation numbers are copied from the source and verified against it. Inferences are kept separate from what the paper actually states, and tagged with a confidence level.
 
-> ⚠️ **Output is in Chinese** (technical terms kept in English), as are the skill instructions themselves. English output is [on the roadmap](#roadmap).
+> ⚠️ **Output is in Chinese** (technical terms kept in English), as are the skill instructions themselves. English output is not currently supported.
 
 ```bash
 git clone https://github.com/Jin-C137/read-paper.git ~/.claude/skills/read-paper
@@ -17,7 +17,7 @@ pip install pymupdf
 
 ## 效果
 
-![read-paper 生成的笔记：符号释义表按角色上徽章，公式里每个量对应同色底色，每条公式配一段直觉](demo/screenshot.jpg)
+![read-paper 生成的笔记：符号释义表按角色上徽章，公式里每个量对应同色底色，每条公式配一段直觉](demo/screenshot.png)
 
 <sub>截自 <a href="demo/dpo.html"><code>demo/dpo.html</code></a> 第 3.1 节。一屏里能看到这个 skill 的全部核心动作：<b>顶部释义表</b>把该组公式首次出现的符号逐个定义并标上身份徽章（这一屏里「集 / 参 / 随 / 决 / 派生」五型都出现了）；<b>中间公式块</b>里每个量的底色与徽章同色相，式号照抄原文、右对齐；<b>下方三段「直觉」</b>讲的是每条式子在说什么事、带来什么建模后果，不是复述公式。</sub>
 
@@ -148,7 +148,7 @@ read-paper/
 │   └── palettes.md           # 四套配色 + 配色的五条硬约束
 └── demo/                     # 真实产出示例，不参与 skill 运行
     ├── dpo.html
-    └── screenshot.jpg
+    └── screenshot.png
 ```
 
 `SKILL.md` 是唯一常驻的入口，三份 `references/` 按需加载——这是 skill 的标准做法，避免把全部规则塞进每次对话的上下文。
