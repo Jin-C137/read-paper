@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阅读笔记 · Rafailov et al. (2023) · DPO：把 RLHF 的两阶段压成一个交叉熵</title>
+<style>
+
+  :root{
+    --bg:#ffffff;
+    --fg:#272727;
+    --muted:#886060;
+    --line:#edd9d9;
+    --card:#ffffff;
+    --accent:#a5403f;
+    --accent-soft:#f3e6e6;
+    --accent-line:#e8cdcd;
+    --code-bg:#faf4f4;
+    --box-bg:#fbf6f6;
+    --toc-bg:#f8f1f1;
+    --toc-line:#e6cac9;
+    --row-alt:#faf4f4;
+    --row-hl:#f0dfde;
+    --intu-bg:#fcf8f8;
+    --gloss-bg:#fcf9f9;
+    --gloss-line:#e4c6c5;
+    --fill-dv:rgba(165,64,63,.24);
+    --fill-rp:rgba(51,105,159,.26);
+    --fill-df:rgba(152,62,116,0.24);
+    --fill-do:rgba(47,96,69,0.24);
+    --ok:#2d7a3c;
+    --ok-soft:#edf4ee;
+    --ok-line:#c0d7c5;
+    --warn:#8a4380;
+    --warn-soft:#f5eff4;
+    --warn-line:#dcc7d9;
+    --bad:#b64342;
+    --bad-soft:#f9efef;
+    --bad-line:#e9c7c6;
+    --k-s:#392461;
+    --k-s-soft:#e7e5ec;
+    --k-s-line:#bcb5c9;
+    --k-p:#74636a;
+    --k-p-soft:#eeeced;
+    --k-p-line:#d0cacc;
+    --k-d:#a5403f;
+    --k-d-soft:#f4e8e8;
+    --k-d-line:#e0bebe;
+    --k-r:#33699f;
+    --k-r-soft:#e7edf3;
+    --k-r-line:#baccde;
+    --k-o:#2f6045;
+    --k-o-soft:#e6ece9;
+    --k-o-line:#b8c9c0;
+    --k-f:#983e74;
+    --k-f-soft:#f3e8ee;
+    --k-f-line:#dcbdd0;
+    --maxw:1040px;
+    --blk:15px;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:16px; line-height:1.75; letter-spacing:.01em;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:48px 24px 120px}
+  header.hero{border-bottom:2px solid var(--fg); padding-bottom:22px; margin-bottom:34px}
+  .kicker{font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin:0 0 10px}
+  h1{font-size:clamp(22px,3.4vw,32px); line-height:1.3; margin:0 0 14px; font-weight:700}
+  .meta{font-size:var(--blk); color:var(--muted); line-height:1.85}
+  .meta b{color:var(--fg); font-weight:600}
+  h2{font-size:21px; margin:52px 0 14px; padding-top:14px; border-top:1px solid var(--line); font-weight:700}
+  h2 .num{color:var(--fg); font-variant-numeric:tabular-nums; margin-right:10px}
+  h3{font-size:16.5px; margin:30px 0 10px; font-weight:700}
+  h4{font-size:16px; margin:22px 0 8px; font-weight:700; color:var(--muted); letter-spacing:.03em}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 14px; padding-left:22px}
+  li{margin:0 0 6px}
+  a{color:var(--accent)}
+  /* 区块字体：全部继承正文（Segoe UI + 微软雅黑），不再使用等宽字体 */
+  code{font-family:inherit; font-size:var(--blk); background:var(--code-bg); padding:1px 5px; border-radius:4px}
+  .eq{background:var(--code-bg); border-left:3px solid var(--accent); border-radius:0 6px 6px 0;
+      padding:12px 16px; margin:12px 0; overflow-x:auto;
+      font-family:inherit; font-size:var(--blk); line-height:1.95}
+  .tag{display:inline-block; font-size:var(--blk); font-weight:700; letter-spacing:.04em;
+       padding:1px 9px; border-radius:4px; border:1px solid var(--line); background:var(--accent-soft); color:var(--accent)}
+  .tbl{overflow-x:auto; margin:14px 0 18px; border:1px solid var(--accent-line); border-radius:8px; background:var(--card)}
+  table{border-collapse:collapse; width:100%; font-size:var(--blk); min-width:640px}
+  th,td{padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top}
+  thead th{background:var(--accent-soft); font-weight:700; white-space:nowrap; font-size:var(--blk); letter-spacing:.03em}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  tbody tr.hl{background:var(--row-hl)}
+  /* 含 rowspan 合并单元格的表：按「两行一组」上底色，避免合并列位置留出未渲染的空白 */
+  table.pairs tbody tr:nth-child(even){background:transparent}
+  table.pairs tbody tr:nth-child(4n+3),
+  table.pairs tbody tr:nth-child(4n+4){background:var(--row-alt)}
+  table.pairs tbody tr.hl{background:var(--row-hl)}
+  td.c,th.c{text-align:center}
+  .y{color:var(--fg); font-weight:400}
+  tbody tr.hl .y{font-weight:700}
+  .n{color:var(--muted)}
+  .box{border:1px solid var(--accent-line); border-left:4px solid var(--accent); background:var(--box-bg);
+       border-radius:0 8px 8px 0; padding:14px 18px; margin:18px 0}
+  .box.warn{border-color:var(--warn-line); border-left-color:var(--warn); background:var(--warn-soft)}
+  .box.bad{border-color:var(--bad-line); border-left-color:var(--bad); background:var(--bad-soft)}
+  .box.ok{border-color:var(--ok-line); border-left-color:var(--ok); background:var(--ok-soft)}
+  .box .t{font-weight:700; font-size:var(--blk); margin:0 0 6px; letter-spacing:.03em}
+  .box.warn .t{color:var(--warn)} .box.bad .t{color:var(--bad)} .box.ok .t{color:var(--ok)}
+  .box p:last-child,.box ul:last-child{margin-bottom:0}
+  nav.toc{background:var(--toc-bg); border:1px solid var(--toc-line); border-radius:10px; padding:16px 20px; margin:0 0 10px}
+  nav.toc .t{font-size:var(--blk); letter-spacing:.12em; color:var(--muted); font-weight:700; margin:0 0 8px}
+  nav.toc ol{margin:0; padding-left:20px; font-size:var(--blk); font-weight:600}
+  nav.toc li{margin:3px 0}
+  nav.toc a{text-decoration:none} nav.toc a:hover{text-decoration:underline}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){ .grid2{grid-template-columns:1fr} }
+  .card{border:1px solid var(--accent-line); background:var(--box-bg); border-radius:8px; padding:14px 16px}
+  .card .t{font-weight:700; font-size:var(--blk); margin:0 0 6px}
+  /* ---- 符号释义块 notation gloss：<details>，默认展开，读熟了可自行收起 ---- */
+  .gloss{border:1px dashed var(--gloss-line); background:var(--gloss-bg); border-radius:8px; padding:11px 15px 9px; margin:-2px 0 20px; font-size:var(--blk)}
+  .gloss > summary{font-size:var(--blk); letter-spacing:.10em; color:var(--muted); font-weight:700; margin:0 0 8px;
+                   cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:9px}
+  .gloss > summary::-webkit-details-marker{display:none}  /* 去掉原生三角，换成下面自绘的 */
+  .gloss > summary::before{content:"▾"; font-size:22px; line-height:1; color:var(--muted)}
+  .gloss:not([open]) > summary::before{content:"▸"}
+  .gloss:not([open]) > summary{margin-bottom:0}
+  .gloss > summary:hover, .gloss > summary:hover::before{color:var(--accent)}
+  .gloss > summary .cnt{font-weight:400; letter-spacing:0}  /* 收起时仍看得出这组有几个符号 */
+  .gi{display:grid; grid-template-columns:168px 56px 1fr; gap:11px; align-items:baseline; padding:5px 0; border-bottom:1px dotted var(--line)}
+  .gi:last-child{border-bottom:none}
+  .gi .sym{color:var(--accent); font-weight:700; word-break:break-word}
+  .gi .d{line-height:1.65}
+  .k{display:inline-block; font-size:var(--blk); font-weight:700; text-align:center; border-radius:5px;
+     padding:0 7px; line-height:1.5; letter-spacing:.02em; white-space:nowrap; border:1px solid transparent}
+  .gi .k{padding:0; justify-self:stretch}
+  .k-s{background:var(--k-s-soft); color:var(--k-s); border-color:var(--k-s-line)}
+  .k-p{background:var(--k-p-soft); color:var(--k-p); border-color:var(--k-p-line)}
+  .k-d{background:var(--k-d-soft); color:var(--k-d); border-color:var(--k-d-line)}
+  .k-r{background:var(--k-r-soft); color:var(--k-r); border-color:var(--k-r-line)}
+  .k-o{background:var(--k-o-soft); color:var(--k-o); border-color:var(--k-o-line)}
+  .k-f{background:var(--k-f-soft); color:var(--k-f); border-color:var(--k-f-line)}
+
+  @media (max-width:640px){ .gi{grid-template-columns:1fr; gap:2px} .gi .k{justify-self:start; padding:1px 7px} }
+  /* ---- 长查阅表折叠壳 fold：<details>，默认展开；原来的 h3/h4 标题搬进 summary ---- */
+  .fold > summary{cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:9px}
+  .fold > summary::-webkit-details-marker{display:none}  /* 去掉原生三角，换成下面自绘的 */
+  .fold > summary::before{content:"▾"; font-size:22px; line-height:1; color:var(--muted)}
+  .fold:not([open]) > summary::before{content:"▸"}
+  .fold > summary h3, .fold > summary h4{margin-bottom:0}
+  .fold > summary:hover h3, .fold > summary:hover h4, .fold > summary:hover::before{color:var(--accent)}
+  .fold > summary .cnt{font-weight:400; color:var(--muted); letter-spacing:0}  /* 收起时仍看得出表里有几行 */
+  .fold:not([open]){margin-bottom:18px}  /* 收起后补上 .tbl 让出的下边距 */
+  /* ---- 公式直觉块 ---- */
+  .intu{border-left:3px solid var(--accent); background:var(--intu-bg); border-radius:0 6px 6px 0;
+        padding:6px 14px 6px 15px; margin:-8px 0 16px; font-size:var(--blk); line-height:1.75}
+  .intu .lab{display:inline-block; font-size:var(--blk); letter-spacing:.08em; color:var(--muted);
+             font-weight:700; margin-right:9px; white-space:nowrap}
+  .intu + .intu{margin-top:-10px}
+
+/* ===== 公式符号的五态渲染 ==============================================
+   .dv 决策变量（主色底）/ .rp 不确定参数（次色底）/ .df 派生量（「派生」徽章色底）
+   .do 对偶变量（「对」徽章色底）/ .pm 已知参数（不涂底，灰字）
+   每种底色与释义表里对应徽章同色相 —— 同一个符号在两处指的是同一件事
+   ====================================================================== */
+  var{font-style:normal}
+  /* 荧光笔底色：决 / 随 / 派生 / 对各涂一色（与对应徽章同色相），参数不涂色。
+     填充一律 rgba 半透明，在 --bg / --card / --code-bg 三种底色上都成立。 */
+  var.dv{background:var(--fill-dv); color:var(--fg); font-weight:600; padding:.2em 3px; border-radius:3px}
+  var.rp{background:var(--fill-rp); color:var(--fg); padding:.2em 3px; border-radius:3px}
+  var.df{background:var(--fill-df); color:var(--fg); padding:.2em 3px; border-radius:3px}
+  var.do{background:var(--fill-do); color:var(--fg); padding:.2em 3px; border-radius:3px}
+  var.pm{color:var(--muted)}
+
+  .dgm .node p{margin:0 0 3px}
+  .dgm .node p:last-child{margin-bottom:0}
+/* ====================================================================== */
+  .small{font-size:var(--blk); color:var(--muted)}
+  footer{margin-top:60px; padding-top:18px; border-top:1px solid var(--line); font-size:var(--blk); color:var(--muted)}
+  .conf{font-size:var(--blk); color:var(--muted); font-style:normal}
+  /* ---- 公式行：式号靠 flex 右对齐，不再依赖字宽 ---- */
+  .eqr{display:flex; align-items:baseline; gap:22px; justify-content:space-between}
+  .eqf{white-space:pre-wrap; flex:1 1 auto; min-width:0}
+  .eqn{flex:0 0 auto; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .eqsp{height:.85em}
+  .eqh{font-weight:600; margin-top:.2em}
+  /* ---- 流程图：真 HTML 盒子，字宽无关 ---- */
+  .dgm{margin:16px 0 20px}
+  .dgm .node{border:1px solid var(--accent-line); border-left:3px solid var(--accent); background:var(--box-bg);
+             border-radius:0 8px 8px 0; padding:11px 16px; font-size:var(--blk); line-height:1.7}
+  .dgm .node .nt{font-weight:700; margin:0 0 4px}
+  .dgm .node .ns{color:var(--muted)}
+  .dgm .arw{text-align:center; color:var(--muted); font-weight:700; padding:6px 0; font-size:var(--blk)}
+  .dgm .pair{display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; padding:8px 0}
+  .dgm .pair .lbl{font-size:var(--blk); color:var(--muted); text-align:center; line-height:1.55}
+  .dgm ol,.dgm ul{margin:4px 0 0; padding-left:20px}
+  .dgm li{margin:2px 0}
+  @media (max-width:640px){ .dgm .pair{grid-template-columns:1fr} }
+  /* 打印：尽力展开被读者收起的折叠块。各浏览器对 details 隐藏内容的实现不同，
+     这条不保证生效 —— 交付时折叠块一律带 open，打印前确认没被手动收起。 */
+  @media print{
+    .gloss{border-style:solid}
+    .gloss:not([open]) > *:not(summary){display:block !important}
+    .fold:not([open]) > *:not(summary){display:block !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="kicker">阅读笔记 · READING NOTE · 2026-08-10</p>
+  <h1>Direct Preference Optimization: Your Language Model is Secretly a Reward Model</h1>
+  <p class="meta">
+    <b>作者</b>：Rafael Rafailov*、Archit Sharma*、Eric Mitchell*、Stefano Ermon、Christopher D. Manning、Chelsea Finn（Stanford University；Ermon 兼 CZ Biohub。*为共同一作，原文脚注写明「more junior authors listed earlier」）<br>
+    <b>出处</b>：37th Conference on Neural Information Processing Systems (<i>NeurIPS 2023</i>) ｜ <a href="https://arxiv.org/abs/2305.18290">arXiv:2305.18290v3 [cs.LG]</a>，v3 日期 2024-07-29 ｜ 许可 CC BY 4.0（由用户确认）<br>
+    <b>本地文件</b>：<code>dpo.pdf</code>（27 页，全文已提取，93751 字符）<br>
+    <b>读它的目的</b>：作为公开仓库里的精读笔记 demo；同时把 DPO 的推导链一步步拆开，弄清「配分函数为什么会消掉」这一关键跳跃。
+  </p>
+</header>
+
+<nav class="toc">
+  <p class="t">目录</p>
+  <ol>
+    <li><a href="#s1">Motivation：RLHF 的两阶段是手段，不是目的</a></li>
+    <li><a href="#s2">Literature review：别人都在「先估奖励、再优化」</a></li>
+    <li><a href="#s3">模型全貌：从 KL 约束目标到一个交叉熵</a></li>
+    <li><a href="#s4">实验设置与主要结论</a></li>
+    <li><a href="#s5">建模贡献在哪里（含我的评估）</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="num">1</span>Motivation：RLHF 的两阶段是手段，不是目的</h2>
+
+<h3>作者的论证链条</h3>
+
+<div class="dgm">
+  <div class="node"><p class="nt">① 大规模无监督预训练给了模型广博能力，却给不了控制权</p><p class="ns">训练语料由目标、优先级、技能各异的人写成，其中有些行为并不值得模仿。原文的例子：我们希望模型「知道」有 50% 的人相信某个误解，但绝不希望它在 50% 的相关提问里把这个误解说成真的。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">② 于是要从模型已有的宽广能力里「挑出」想要的行为</p><p class="ns">最直接的办法是在高质量示范上做监督微调；但相对判断（A 比 B 好）比专家示范便宜得多、也容易收集得多，所以主流走向了偏好学习。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">③ 主流方案 RLHF：三个阶段串起来</p><p class="ns">SFT → 用偏好数据拟合一个显式奖励模型 → 用 RL（通常是 PPO）在 KL 约束下最大化这个学到的奖励。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">④ 代价：整条 pipeline 比监督学习复杂得多</p><p class="ns">原文列的三条：要训练多个 LM；训练回路里要从策略采样；由此带来显著算力开销。另加一句定性判断 —— RLHF「complex and often unstable」。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">⑤ 关键观察：KL 约束下的奖励最大化有闭式最优解</p><p class="ns">既然「奖励 → 最优策略」有解析映射，那就能反过来把「奖励」用「策略」表达出来 —— 这一步是全文的支点。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">⑥ 结论：换元之后，奖励模型的分类损失直接变成策略的损失</p><p class="ns">一个二元交叉熵就能把标准 RLHF 问题解掉：不拟合显式奖励、不做 RL、微调期间不用采样。语言模型自己就是那个奖励模型。</p></div>
+</div>
+
+<h3>Research gap 逐条</h3>
+
+<div class="grid2">
+  <div class="card"><p class="t">Gap 1 · 没人证明「显式奖励模型」是必需的</p><p class="small">所有现有工作都默认「先拟合奖励 r<sub>ϕ</sub>，再优化它」。但 RLHF 真正要的是那个策略，奖励模型只是中间产物。这个中间产物能不能绕开，此前没有回答。</p></div>
+  <div class="card"><p class="t">Gap 2 · RL 微调在语言上本来就别扭</p><p class="small">原文点明：由于语言生成是离散的，式 (3) 的目标对策略不可微，只能靠 RL 求解。于是要采样、要处理高方差策略梯度、要调一堆超参。</p></div>
+  <div class="card"><p class="t">Gap 3 · 偏好学习缺一个「理论等价但实现简单」的替代</p><p class="small">不是要一个近似、更弱的方法，而是要一个在同一个目标（KL 约束下的奖励最大化）意义上等价、但只用交叉熵就能训的方法。</p></div>
+  <div class="card"><p class="t">Gap 4 · 语言之外的偏好学习也卡在同一处</p><p class="small">PbRL 与 dueling bandit 一系同样是「先显式估计潜在评分函数、再优化它」；且 CDB 的偏好标签是在线给的，而 RLHF 面对的是固定的离线偏好对批次 —— 现成理论接不上。</p></div>
+</div>
+
+<div class="box ok"><p class="t">写法值得借鉴 · 先把对方的成绩说满，再谈代价</p><p>Related Work 里作者的原句是：RLHF「produces models with impressive conversational and coding abilities」，紧接着才是 while … 「pipeline is considerably more complex than supervised learning」。先给足台阶，再把批评严格限定在「复杂度」这一个维度上，不去否定效果 —— 这样批评落点小、也更难被反驳。Discussion 末尾的 Limitations 同样值得抄：作者自己列了五个未解问题（OOD 泛化、能否自标注利用无标注 prompt、reward over-optimization、只验到 6B、GPT-4 评测受 prompt 影响），其中一条甚至直接指着自己图 3 右图的性能下滑问「这是不是 over-optimization 的一个实例」。</p></div>
+
+<h2 id="s2"><span class="num">2</span>Literature review：别人都在「先估奖励、再优化」</h2>
+
+<p>原文的 Section 2 是纯叙述式的 Related Work，<b>没有综述对比表</b>，因此这里无表可逐格复刻。替代内容是下面这张逐篇一览表：按原文的归类把被引文献重排一遍，并标出每篇在本文语境里起什么作用。</p>
+
+<details class="fold" open>
+  <summary><h3>被引文献逐篇一览 <span class="cnt">· 32 行</span></h3></summary>
+  <p class="small">「原文的归类」一列照录 Section 2（及方法/实验节）里作者给出的分组用语；「该文的着眼点」一列大部分只依据标题与被引方的归类推断。</p>
+  <div class="box warn"><p class="t">待核实 · 整表</p><p>本表的「该文的着眼点」一列<b>整列未回源</b>，仅据标题与 DPO 作者的归类推断，不能当定论。生成本笔记时标注待核实即可；但这些文献日后要写进自己稿子的 related work 之前，<b>必须逐篇回原文确认</b>。</p></div>
+  <div class="tbl">
+  <table>
+  <thead><tr><th>文献号</th><th>标题与出处</th><th>原文的归类</th><th>该文的着眼点（待核实）</th></tr></thead>
+  <tbody>
+  <tr><td>[33]</td><td>Radford et al., Language models are unsupervised multitask learners, 2019</td><td>自监督 LM 的 zero-shot 能力</td><td>GPT-2；规模化带来零样本任务能力</td></tr>
+  <tr><td>[6][27][11]</td><td>Brown et al. (NeurIPS 2020)；Narayanan et al. (SC 2021)；Chowdhery et al., PaLM (2022)</td><td>few-shot prompt 能力</td><td>GPT-3 / Megatron-LM 训练系统 / PaLM</td></tr>
+  <tr><td>[25][38][13][41]</td><td>Mishra et al. (ACL 2022)；Sanh et al. (ICLR 2022)；Chung et al. (2022)；Thoppilan et al., LaMDA (2022)</td><td>instruction tuning</td><td>指令微调让模型泛化到指令集之外，提升可用性</td></tr>
+  <tr><td>[20]</td><td>Kreutzer et al. (ACL 2018)</td><td>用人类偏好微调：翻译</td><td>人类 bandit 反馈的可靠性与可学习性</td></tr>
+  <tr><td>[40]</td><td>Stiennon et al., Learning to summarize from human feedback (2022)</td><td>用人类偏好微调：摘要</td><td>本文 TL;DR 偏好标注的直接来源</td></tr>
+  <tr><td>[51]</td><td>Ziegler et al., Fine-tuning LMs from human preferences (2020)</td><td>摘要 / story-telling；RLHF 三段式的原型</td><td>奖励模型从 SFT 模型初始化 + 顶部加线性层出标量，这一做法即出自此文</td></tr>
+  <tr><td>[28][34]</td><td>Ouyang et al., InstructGPT (NeurIPS 2022)；Ramamurthy et al. (ICLR 2023)</td><td>用人类偏好微调：指令跟随</td><td>InstructGPT 三段式；后者是 PPO 的变体与 NLP 上的 RL 基准</td></tr>
+  <tr><td>[5]</td><td>Bradley &amp; Terry, Biometrika 39(3/4):324–345, 1952</td><td>偏好模型</td><td>Bradley-Terry 模型本体，式 (1) 的出处</td></tr>
+  <tr><td>[32][23]</td><td>Plackett (JRSS-C 1975)；Luce, Individual choice behavior (2012 重印)</td><td>更一般的排序模型</td><td>Plackett-Luce；附录 A.3 的推广依据</td></tr>
+  <tr><td>[4]</td><td>Bong &amp; Rinaldo (ICML 2022), arXiv:2110.11487</td><td>BT-Luce 模型 MLE 的存在性与一致性</td><td>支撑「DPO 等价于拟合重参数化的 BT 模型，因而继承其一致性」这一论断</td></tr>
+  <tr><td>[47][39]</td><td>Williams (1992)；Schulman et al., PPO (2017)</td><td>常用 RL 算法</td><td>REINFORCE / PPO，本文的主要对照方法</td></tr>
+  <tr><td>[2]</td><td>Bai et al., Constitutional AI (2022)</td><td>RLAIF</td><td>用已对齐 LLM 按文字守则生成合成偏好数据，人只给弱监督</td></tr>
+  <tr><td>[35][29][48]</td><td>Ranzato et al. (2015)；Paulus et al. (ICLR 2018)；Wu &amp; Hu (AAAI 2018)</td><td>用 RL 训语言模型的各类目标</td><td>序列级训练 / 摘要的强化目标</td></tr>
+  <tr><td>[12][21]</td><td>Christiano et al. (NeurIPS 2017)；Kupcsik et al. (2018)</td><td>从人类偏好学习的通用方法</td><td>Deep RL from human preferences；机器人物体交接</td></tr>
+  <tr><td>[50][14]</td><td>Yue et al. (JCSS 2012)；Dudík et al. (COLT 2015)</td><td>contextual dueling bandit (CDB)</td><td>无绝对奖励时用 von Neumann winner 替代最优策略；标签在线给出</td></tr>
+  <tr><td>[49]</td><td>Yan et al. (SIGIR 2022)</td><td>离线偏好对</td><td>把人类偏好当作 dueling bandit，但数据是固定批次</td></tr>
+  <tr><td>[9][37]</td><td>Busa-Fekete et al. (Mach. Learn. 2014)；Saha et al. (AISTATS 2023)</td><td>preference-based RL (PbRL)</td><td>从未知评分函数生成的二元偏好中学习</td></tr>
+  <tr><td>[16][36]</td><td>Jain et al. (NeurIPS 2013)；Sadigh et al. (RSS 2017)</td><td>PbRL：先显式估计潜在评分函数再优化</td><td>轨迹偏好学习 / 主动偏好式奖励函数学习</td></tr>
+  <tr><td>[31][30]</td><td>Peters &amp; Schaal (ICML 2007)；Peng et al., AWR (2019)</td><td>KL 约束奖励最大化的闭式解先例</td><td>reward-weighted regression / advantage-weighted regression</td></tr>
+  <tr><td>[19][15]</td><td>Korbak et al. (NeurIPS 2022)；Go et al. (ICML 2023)</td><td>同上，且明确指出配分函数难估</td><td>分布匹配式微调 / f-散度最小化对齐</td></tr>
+  <tr><td>[17][18]</td><td>Jaques et al. (ICML 2017)；Jaques et al. (2020)</td><td>把 RL 微调写成 KL-control 形式</td><td>式 (3) 那个「奖励减 β·KL」写法的出处</td></tr>
+  <tr><td>[22]</td><td>Levine, RL and control as probabilistic inference (2018)</td><td>control as inference</td><td>5.2 节诊断 actor-critic 不稳定性所借的框架</td></tr>
+  <tr><td>[1]</td><td>Bai et al., Training a helpful and harmless assistant with RLHF (2022)</td><td>数据集 + RLHF 实践</td><td>Anthropic HH，17 万条人机对话，本文对话实验的数据源</td></tr>
+  <tr><td>[24]</td><td>Maas et al. (ACL 2011)</td><td>数据集</td><td>IMDb 影评，情感控制实验的 prompt 前缀来源</td></tr>
+  <tr><td>[43]</td><td>Völske et al. (New Frontiers in Summarization 2017)</td><td>数据集</td><td>Reddit TL;DR 摘要数据集</td></tr>
+  <tr><td>[26]</td><td>Nallapati et al. (SIGNLL CoNLL 2016)</td><td>数据集</td><td>CNN/DailyMail，用作分布外测试集</td></tr>
+  <tr><td>[3]</td><td>Biderman et al., Pythia (2023)</td><td>基座模型</td><td>Pythia-2.8B，对话实验的起点</td></tr>
+  <tr><td>[45]</td><td>Wang &amp; Komatsuzaki, GPT-J-6B (2021)</td><td>基座模型</td><td>摘要实验的 6B 基座</td></tr>
+  <tr><td>[44]</td><td>von Werra et al., CarperAI/trlx v0.6.0 (2023)</td><td>工具与基线实现</td><td>TRLX 框架；PPO-GT (TRL) 基线亦出自此</td></tr>
+  <tr><td>[46]</td><td>Welleck et al., Neural text generation with unlikelihood training (2019)</td><td>伪监督基线</td><td>Unlikelihood，本文的重要对照</td></tr>
+  <tr><td>[10]</td><td>Chen et al. (arXiv:2304.00723, 2023)</td><td>自动评测</td><td>用 LLM 做无参考文本质量评估，支撑 GPT-4 当评委</td></tr>
+  <tr><td>[7][8][42]</td><td>Brown et al. (NeurIPS 2020 版)；Bubeck et al., Sparks of AGI (2023)；Touvron et al., LLaMA (2023)</td><td>引言里的「大模型能力惊人」举证</td><td>不参与方法论证，只作背景</td></tr>
+  </tbody>
+  </table>
+  </div>
+</details>
+
+<h3>把这张表压成结论</h3>
+
+<ol>
+<li><b>所有前人路线都是两阶段的。</b>无论是语言上的 RLHF（[51][40][1][28]）还是语言之外的 PbRL（[16][9][12][36][21]），骨架都一样：先把潜在的评分/奖励函数显式估出来，再去优化它。DPO 的定位正是「single stage policy learning approach」。</li>
+<li><b>「KL 约束下最优策略有闭式解」不是本文的新发现。</b>作者明确把它归给 [31][30][19][15]，并且说「it is straightforward to show」。本文的新东西不是这个解，而是<b>把它反过来用</b>：不去求策略，而是用策略去表达奖励。</li>
+<li><b>「配分函数难估」也是前人已经指出的路障</b>（[19][15]）。前人在这里停住了（转向分布匹配、f-散度等别的路子），DPO 的做法是绕过去 —— 让它在 BT 的差分里自己消失。</li>
+<li><b>理论保证是借来的，不是新证的。</b>一致性论断挂在 [4] 上：只要 DPO 等价于拟合一个重参数化的 BT 模型，BT-Luce 的 MLE 理论就直接适用。这是很省力的一步棋。</li>
+<li><b>CDB / PbRL 那一支被作者礼貌地隔开了。</b>理由不是它们做得不好，而是设定不同：CDB 假设偏好在线获取，而 RLHF 的现实是固定的离线偏好批次。这条切割写得干净，值得学。</li>
+</ol>
+
+<h2 id="s3"><span class="num">3</span>模型全貌：从 KL 约束目标到一个交叉熵</h2>
+
+<p>DPO 不是优化问题论文，全文没有对偶变量，因此<b>「对」这一型不用</b>。下面只用实际存在的五型。判据仍是那三问：优化器（这里是梯度下降）能动吗？是外部给的吗？外部给的话确定还是随机？</p>
+
+<details class="fold" open>
+  <summary><h3>符号身份图例 <span class="cnt">· 5 行</span></h3></summary>
+  <div class="tbl">
+  <table>
+  <thead><tr><th>徽章</th><th>在本文里具体指什么</th><th>判据</th></tr></thead>
+  <tbody>
+  <tr><td><span class="k k-s">集</span></td><td>索引与取值空间：prompt <i>x</i>、completion <i>y</i>、数据集 D 及其下标 i，求和/连乘的哑标 k、j</td><td>不是「量」，公式里不包 <code>var</code></td></tr>
+  <tr><td><span class="k k-p">参</span></td><td>给定且训练动不了的：β、π<sub>ref</sub>、π<sub>SFT</sub>、真值奖励 r*、样本量 N、排序长度 K、unlikelihood 系数 α</td><td>①否 ②是 ③确定</td></tr>
+  <tr><td><span class="k k-d">决</span></td><td>要学的那部分：策略参数 θ 与策略 π<sub>θ</sub>；对照方法里显式奖励模型的参数 ϕ 与 r<sub>ϕ</sub></td><td>①是 —— 梯度直接更新它</td></tr>
+  <tr><td><span class="k k-r">随</span></td><td>偏好样本：候选对 (y<sub>1</sub>, y<sub>2</sub>)、以及由 Bradley-Terry 分布决定谁被标成 y<sub>w</sub> / y<sub>l</sub>；Plackett-Luce 下则是排序 τ</td><td>①否 ②是 ③随机 —— <b>这是真的随机参数，不是记法</b></td></tr>
+  <tr><td><span class="k k-f">派生</span></td><td>由上面这些唯一决定的中间量：配分函数 Z(x)、诱导出的最优策略 π<sub>r</sub> / π*、隐式奖励 r̂<sub>θ</sub>、投影 f(r; π<sub>ref</sub>, β)、以及两个损失 L<sub>R</sub> 与 L<sub>DPO</sub></td><td>①否 ②否</td></tr>
+  </tbody>
+  </table>
+  </div>
+  <p class="small">「对」（对偶变量）在本文不存在：DPO 的所有推导都在原问题上进行，KL 约束是以罚项形式直接写进目标的，从未引入拉格朗日乘子。硬安一个身份比不标更糟，所以整篇不用这一型。</p>
+</details>
+
+<details class="fold" open>
+  <summary><h3>记法与算子（不进符号释义表，在这里交代一次） <span class="cnt">· 8 行</span></h3></summary>
+  <div class="tbl">
+  <table>
+  <thead><tr><th>记法</th><th>读法</th><th>说明</th></tr></thead>
+  <tbody>
+  <tr><td>y ≻ y′ | x</td><td>在 x 下 y 优于 y′</td><td>原文的偏好记号；y<sub>w</sub> 为 winner、y<sub>l</sub> 为 loser</td></tr>
+  <tr><td>E<sub>·</sub>[·]</td><td>期望</td><td>下标写明对什么分布取期望</td></tr>
+  <tr><td>D<sub>KL</sub>(· ‖ ·)</td><td>KL 散度</td><td>本文一律是「策略 相对 参考策略」的方向</td></tr>
+  <tr><td>σ(·)</td><td>logistic 函数</td><td>原文只说「σ is the logistic function」；附录用到 σ′(x)=σ(x)(1−σ(x)) 与 σ(−x)=1−σ(x)</td></tr>
+  <tr><td>Σ<sub>y</sub></td><td>对所有 y 求和</td><td><b>求和范围是全部可能的完整回答</b>，量级约为「词表大小的序列长度次方」—— 这一点是理解式 (4) 为何不可用的关键</td></tr>
+  <tr><td>∇<sub>θ</sub></td><td>对 θ 求梯度</td><td>—</td></tr>
+  <tr><td>max<sub>π</sub> / min<sub>π</sub> / arg max<sub>π</sub></td><td>对策略取极值</td><td>式 (11) 里明确是「general non-parametric policy class」上的极值，不是参数化模型类</td></tr>
+  <tr><td>a / b（本笔记内）</td><td>分式</td><td>原文写成上下叠放的分数；本笔记一律压成一行的斜杠形式，必要时加方括号界定范围</td></tr>
+  </tbody>
+  </table>
+  </div>
+</details>
+
+<div class="box warn"><p class="t">符号撞车警示 · 读之前先记住这三组，否则必绕晕</p>
+<ul>
+<li><b>r 有四个身份</b>：<code>r*</code> 真值奖励（存在但拿不到）、<code>r<sub>ϕ</sub></code> 显式拟合的奖励模型（传统 RLHF 才有）、<code>r</code> 推导中的任意给定奖励函数、<code>r̂<sub>θ</sub></code> DPO 的隐式奖励（由 π<sub>θ</sub> 算出来的）。四者的身份徽章分别是 参 / 决 / 参 / 派生 —— <b>同一个字母横跨三型</b>。</li>
+<li><b>π 有五个身份</b>：<code>π<sub>SFT</sub></code>（监督微调得到的）、<code>π<sub>ref</sub></code>（参考策略，通常就等于 π<sub>SFT</sub>）、<code>π<sub>θ</sub></code>（在学的）、<code>π<sub>r</sub></code>（某个 r 诱导出的最优策略）、<code>π*</code>（真值 r* 诱导出的最优策略）。<b>π<sub>r</sub> 和 π* 是派生量，π<sub>θ</sub> 才是决策变量</b>；DPO 的全部戏法就是让 π<sub>θ</sub> 去逼近 π*。</li>
+<li><b>f 有两个身份</b>：Definition 1 里 <code>f(x)</code> 是「任意一个只依赖 x 的函数」（等价类的自由度）；Theorem 1 里 <code>f(r; π<sub>ref</sub>, β)</code> 是一个把奖励函数映到其等价类某个代表元的<b>算子</b>。两者只是重名。</li>
+<li><b>Z(x) 的隐藏依赖</b>：记号写作 Z(x)，但它同时依赖 r 和 π<sub>ref</sub>。原文在附录 A.6 特意补了一句「notice that Z(x) also depends on the reward function r」—— 正文里没写，容易漏。</li>
+<li><b>β 一人两用</b>：既是 KL 罚项的强度，又是隐式奖励 r̂<sub>θ</sub> = β·log(π<sub>θ</sub>/π<sub>ref</sub>) 的尺度因子。这不是巧合，是式 (5) 的直接后果。</li>
+</ul>
+</div>
+
+<h3>3.1 起点：原封不动照抄的 RLHF 三阶段</h3>
+
+<details class="gloss" open>
+  <summary>式 (1)(2)(3) 新出现的符号 <span class="cnt">· 12 个</span></summary>
+  <div class="gi"><span class="sym">x</span><span class="k k-s">集</span><span class="d">prompt（提示）。情感任务里是影评前缀，摘要任务里是 Reddit 帖子，对话任务里是用户 query</span></div>
+  <div class="gi"><span class="sym">y</span><span class="k k-s">集</span><span class="d">completion（一整条回答），取值空间是全部可能的 token 序列</span></div>
+  <div class="gi"><span class="sym">D</span><span class="k k-s">集</span><span class="d">静态偏好数据集 D = {(x<sup>(i)</sup>, y<sub>w</sub><sup>(i)</sup>, y<sub>l</sub><sup>(i)</sup>)}<sub>i=1</sub><sup>N</sup>，从 p* 采样得到</span></div>
+  <div class="gi"><span class="sym">N</span><span class="k k-p">参</span><span class="d">偏好对的条数</span></div>
+  <div class="gi"><span class="sym">y<sub>1</sub>, y<sub>2</sub></span><span class="k k-r">随</span><span class="d">同一 prompt 下采样出来的一对候选回答，y<sub>1</sub>, y<sub>2</sub> ~ π<sup>SFT</sup>(y | x)</span></div>
+  <div class="gi"><span class="sym">y<sub>w</sub>, y<sub>l</sub></span><span class="k k-r">随</span><span class="d">标注者从 (y<sub>1</sub>, y<sub>2</sub>) 中选出的被偏好 / 不被偏好者。<b>谁当 w 是随机的</b>，服从式 (1) 的 Bradley-Terry 分布</span></div>
+  <div class="gi"><span class="sym">p*</span><span class="k k-p">参</span><span class="d">真实的人类偏好分布（假定存在，由 r* 通过 BT 生成）</span></div>
+  <div class="gi"><span class="sym">r*(x, y)</span><span class="k k-p">参</span><span class="d">潜在的真值奖励函数。<b>给定但不可观测</b> —— 不能动、不是随机，所以是参不是随</span></div>
+  <div class="gi"><span class="sym">r<sub>ϕ</sub>(x, y)</span><span class="k k-d">决</span><span class="d">显式拟合的奖励模型，参数 ϕ。实践上从 π<sup>SFT</sup> 初始化、在最后一层 transformer 上加一个输出标量的线性层</span></div>
+  <div class="gi"><span class="sym">L<sub>R</sub>(r<sub>ϕ</sub>, D)</span><span class="k k-f">派生</span><span class="d">奖励模型的负对数似然损失（二分类交叉熵）</span></div>
+  <div class="gi"><span class="sym">π<sub>θ</sub>(y | x)</span><span class="k k-d">决</span><span class="d">要学的语言模型策略，参数 θ。实践中初始化为 π<sup>SFT</sup></span></div>
+  <div class="gi"><span class="sym">π<sub>ref</sub>(y | x)</span><span class="k k-p">参</span><span class="d">参考策略，即初始的 SFT 模型 π<sup>SFT</sup>；训练全程冻结</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr eqh"><span class="eqf">Bradley-Terry 偏好模型：</span></div>
+<div class="eqr"><span class="eqf"><var class="pm">p*</var>(<var class="rp">y<sub>1</sub></var> ≻ <var class="rp">y<sub>2</sub></var> | x) = exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>1</sub></var>)) / [ exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>1</sub></var>)) + exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>2</sub></var>)) ]</span><span class="eqn">(1)</span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">奖励模型的最大似然（写成二分类）：</span></div>
+<div class="eqr"><span class="eqf"><var class="df">L<sub>R</sub></var>(<var class="dv">r<sub>ϕ</sub></var>, D) = − E<sub>(x, y<sub>w</sub>, y<sub>l</sub>) ~ D</sub> [ log σ( <var class="dv">r<sub>ϕ</sub></var>(x, <var class="rp">y<sub>w</sub></var>) − <var class="dv">r<sub>ϕ</sub></var>(x, <var class="rp">y<sub>l</sub></var>) ) ]</span><span class="eqn">(2)</span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">RL 微调阶段的目标：</span></div>
+<div class="eqr"><span class="eqf">max<sub>π<sub>θ</sub></sub>　E<sub>x ~ D, y ~ π<sub>θ</sub>(y|x)</sub> [ <var class="dv">r<sub>ϕ</sub></var>(x, y) ] − <var class="pm">β</var> D<sub>KL</sub>( <var class="dv">π<sub>θ</sub></var>(y | x) ‖ <var class="pm">π<sub>ref</sub></var>(y | x) )</span><span class="eqn">(3)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (1)</span>BT 说的是：人不是按绝对分数选，而是按<b>两个奖励之差</b>选，差越大选中概率越接近 1。这一点后面被用到极致 —— 因为只出现差，任何只依赖 x 的公共项都会被约掉。反过来说，BT 的这个结构也决定了<b>奖励的绝对水平永远不可辨识</b>：给所有回答的奖励同时加上一个只和 prompt 有关的常数，人类偏好分布完全不变。</p>
+
+<p class="intu"><span class="lab">直觉 (2)</span>式 (2) 是一个不折不扣的逻辑回归：把 (r<sub>ϕ</sub>(x,y<sub>w</sub>) − r<sub>ϕ</sub>(x,y<sub>l</sub>)) 当 logit，标签恒为「w 赢」。<b>它只是二元交叉熵，从来不需要 RL</b> —— 这一点很重要，因为 DPO 最终做的事，就是让式 (7) 长得和它一模一样，只是把里面的 r<sub>ϕ</sub> 换掉。原文还提到实践中会做归一化 E<sub>x,y~D</sub>[r<sub>ϕ</sub>(x,y)] = 0 来降方差，这本身就是在手工挑等价类里的一个代表元 —— 第 3.7 节会看到 DPO 是自动挑的。</p>
+
+<p class="intu"><span class="lab">直觉 (3)</span>KL 项不是可有可无的正则。原文列了它挡住的三件事：防止模型跑出奖励模型还准确的分布区域、维持生成多样性、防止塌缩到少数几个高奖励回答。代价是：<b>由于语言生成离散，这个目标对策略不可微</b>，于是只能上 RL —— 这正是全文要拆掉的那块砖。此外，实践里 PPO 用的奖励是 r(x,y) = r<sub>ϕ</sub>(x,y) − β(log π<sub>θ</sub> − log π<sub>ref</sub>)（原文正文，未编号），也就是把 KL 罚项吸收进逐样本奖励里。</p>
+
+<h3>3.2 第一步：KL 约束目标的闭式最优解</h3>
+
+<details class="gloss" open>
+  <summary>式 (4)(11)(12)(14)(15) 新出现的符号 <span class="cnt">· 4 个</span></summary>
+  <div class="gi"><span class="sym">r(x, y)</span><span class="k k-p">参</span><span class="d">推导中的<b>任意一个给定的</b>奖励函数（不特指真值，也不特指拟合值）。式 (11) 明说「under any reward function r」</span></div>
+  <div class="gi"><span class="sym">β</span><span class="k k-p">参</span><span class="d">KL 罚项强度，控制偏离 π<sub>ref</sub> 的程度。实验取值：默认 0.1，TL;DR 摘要用 0.5，情感实验扫过 {0.05, 0.1, 1, 5}</span></div>
+  <div class="gi"><span class="sym">Z(x)</span><span class="k k-f">派生</span><span class="d">配分函数（partition function），对给定 x 把全部可能的 y 求和归一。<b>只依赖 x、π<sub>ref</sub> 和 r，不依赖 π</b> —— 这一句是后面所有戏法的支点</span></div>
+  <div class="gi"><span class="sym">π<sub>r</sub>(y | x)</span><span class="k k-f">派生</span><span class="d">由 r 诱导出的最优策略。给定 r 和 π<sub>ref</sub> 就唯一确定，谁也动不了它，也不是外部输入数据</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr eqh"><span class="eqf">闭式最优解（正文）：</span></div>
+<div class="eqr"><span class="eqf"><var class="df">π<sub>r</sub></var>(y | x) = [ 1 / <var class="df">Z</var>(x) ] · <var class="pm">π<sub>ref</sub></var>(y | x) · exp( (1/<var class="pm">β</var>) <var class="pm">r</var>(x, y) )</span><span class="eqn">(4)</span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">其中　<var class="df">Z</var>(x) = Σ<sub>y</sub> <var class="pm">π<sub>ref</sub></var>(y | x) exp( (1/<var class="pm">β</var>) <var class="pm">r</var>(x, y) )　（原文此式未编号）</span><span class="eqn"></span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">附录 A.1 的完整推导（非参数策略类上）：</span></div>
+<div class="eqr"><span class="eqf">max<sub>π</sub>　E<sub>x ~ D, y ~ π</sub> [ <var class="pm">r</var>(x, y) ] − <var class="pm">β</var> D<sub>KL</sub>( <var class="dv">π</var>(y|x) ‖ <var class="pm">π<sub>ref</sub></var>(y|x) )</span><span class="eqn">(11)</span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">= min<sub>π</sub>　E<sub>x ~ D</sub> E<sub>y ~ π(y|x)</sub> [ log( <var class="dv">π</var>(y|x) / { [1/<var class="df">Z</var>(x)] <var class="pm">π<sub>ref</sub></var>(y|x) exp((1/<var class="pm">β</var>) <var class="pm">r</var>(x,y)) } ) − log <var class="df">Z</var>(x) ]</span><span class="eqn">(12)</span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">= min<sub>π</sub>　E<sub>x ~ D</sub> [ D<sub>KL</sub>( <var class="dv">π</var>(y|x) ‖ <var class="df">π*</var>(y|x) ) − log <var class="df">Z</var>(x) ]</span><span class="eqn">(14)</span></div>
+<div class="eqr"><span class="eqf"><var class="dv">π</var>(y|x) = <var class="df">π*</var>(y|x) = [ 1 / <var class="df">Z</var>(x) ] <var class="pm">π<sub>ref</sub></var>(y|x) exp( (1/<var class="pm">β</var>) <var class="pm">r</var>(x, y) )　　对所有 x ∈ D</span><span class="eqn">(15)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (11)→(14)</span>这一整段是<b>配方（completing the square）的概率版</b>：先把「奖励减 KL」整体除以 β 变成一个纯 log 比值，再<b>硬造</b>一个归一化常数 Z(x)，把括号里凑成一个合法概率分布 π*，于是整个目标就退化成「π 到 π* 的 KL，再减一个与 π 无关的 log Z(x)」。式 (12)(13)(14) 之间只是移项与改写，没有独立的物理含义，合并看即可（式 (13) 是式 (14) 的左半边，本笔记未单列）。<b>能这么做的唯一理由是 Z(x) 不含 π</b> —— 所以它在 min 号下是常数，可以整个丢掉。最后由 Gibbs 不等式，KL 在且仅在两分布相等时取 0，最优解就是式 (15)。注意式 (11) 明确写在「general non-parametric policy class」上：<b>这个最优解是分布空间里的，不保证落在任何参数化模型类内</b>。</p>
+
+<p class="intu"><span class="lab">直觉 (4)</span>换个说法：最优策略就是<b>把参考策略按 exp(奖励/β) 做一次重加权</b>。β 越小，指数越陡，越向高奖励回答集中；β → ∞ 则退回 π<sub>ref</sub>。这一步换掉了什么：换掉了「必须用 RL 迭代求解」。<b>代价是它当场就不可用</b> —— Z(x) 要对<b>全部可能的完整回答</b>求和，而回答空间是「词表大小的序列长度次方」量级。原文的措辞是「it is still expensive to estimate the partition function Z(x)」，并把这一困难归给前人 [19][15]。所以式 (4) 是一张开不出来的支票；接下来两节全是在想办法不去兑现它。</p>
+
+<h3>3.3 第二步：反解 —— 用策略把奖励表达出来</h3>
+
+<div class="eq">
+<div class="eqr"><span class="eqf"><var class="pm">r</var>(x, y) = <var class="pm">β</var> log[ <var class="df">π<sub>r</sub></var>(y | x) / <var class="pm">π<sub>ref</sub></var>(y | x) ] + <var class="pm">β</var> log <var class="df">Z</var>(x)</span><span class="eqn">(5)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (5)</span>纯代数：对式 (4) 两边取对数、移项。但<b>方向变了，这才是关键</b>。式 (4) 是「给我奖励，我算最优策略」；式 (5) 是「给我一个策略，我告诉你它是哪个奖励的最优解」。这一步换掉了什么：换掉了「奖励是待估的第一性对象」这一默认设定 —— 从此奖励只是策略的一个函数，不再需要独立存在。代价是<b>凭空多出一个 β log Z(x) 项</b>，而 Z(x) 恰恰就是刚才那个算不动的东西。到这一步为止，困难没有被解决，只是被搬了个家：从式 (4) 的分母搬到了式 (5) 的加项。<b>下一节要做的，就是让这个加项自己消失。</b></p>
+
+<h3>3.4 第三步（全文最关键）：代回 Bradley-Terry，Z(x) 消掉</h3>
+
+<details class="gloss" open>
+  <summary>式 (6)(16)(17) 新出现的符号 <span class="cnt">· 1 个</span></summary>
+  <div class="gi"><span class="sym">π*(y | x)</span><span class="k k-f">派生</span><span class="d">真值奖励 r* 诱导出的最优 RLHF 策略，即式 (4) 中 r = r* 的那一个。它是本文真正想得到的目标对象，但它是 r* 的函数，不是可以直接调参的东西</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr eqh"><span class="eqf">把式 (5) 的重参数化代进式 (1)（附录 A.2 的展开式为 (16)(17)）：</span></div>
+<div class="eqr"><span class="eqf"><var class="pm">p*</var>(<var class="rp">y<sub>1</sub></var> ≻ <var class="rp">y<sub>2</sub></var> | x) = exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>1</sub></var>)) / [ exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>1</sub></var>)) + exp(<var class="pm">r*</var>(x, <var class="rp">y<sub>2</sub></var>)) ]</span><span class="eqn">(16)</span></div>
+<div class="eqr"><span class="eqf"><var class="pm">r*</var>(x, y) = <var class="pm">β</var> log[ <var class="df">π*</var>(y|x) / <var class="pm">π<sub>ref</sub></var>(y|x) ] + <var class="pm">β</var> log <var class="df">Z</var>(x)</span><span class="eqn">(17)</span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">分子分母同除 exp(β log Z(x))，配分函数整体约掉：</span></div>
+<div class="eqr"><span class="eqf"><var class="pm">p*</var>(<var class="rp">y<sub>1</sub></var> ≻ <var class="rp">y<sub>2</sub></var> | x) = 1 / ( 1 + exp{ <var class="pm">β</var> log[<var class="df">π*</var>(<var class="rp">y<sub>2</sub></var>|x) / <var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>2</sub></var>|x)] − <var class="pm">β</var> log[<var class="df">π*</var>(<var class="rp">y<sub>1</sub></var>|x) / <var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>1</sub></var>|x)] } )</span><span class="eqn">(6)</span></div>
+</div>
+
+<div class="box"><p class="t">Z(x) 为什么会被消掉 —— 把这一步单独讲清楚</p>
+<p>机制只有一句话：<b>Z(x) 只依赖 x，不依赖 y；而 BT 只看同一个 x 下两个 y 的奖励之差。</b></p>
+<p>代进去之后，y<sub>1</sub> 和 y<sub>2</sub> 各自带一个 <i>+ β log Z(x)</i>，两者是<b>同一个数</b>（同一个 prompt）。在式 (16) 里它以 exp(β log Z(x)) 的形式同时出现在分子和分母，直接约掉；等价地说，在「差」里它被减没了。</p>
+<p><b>这一步换掉了什么</b>：换掉了「必须知道奖励的绝对值」。DPO 从此只承诺给出<b>正确的相对排序</b>。</p>
+<p><b>代价是什么</b>：奖励的<b>绝对尺度被永久放弃</b>了。式 (5) 里那个 β log Z(x) 不是被算出来的，是被<b>丢掉</b>的 —— DPO 学到的隐式奖励 r̂<sub>θ</sub> 与真值 r* 之间，允许相差任意一个只依赖 prompt 的函数 f(x)。3.7 节的 Definition 1 / Lemma 1 / Lemma 2 存在的全部意义，就是补上一句「丢掉它不影响结果」：同一等价类里的奖励诱导相同的偏好分布（Lemma 1）、也诱导相同的最优策略（Lemma 2）。</p>
+<p><b>还有一个不那么显眼的代价</b>：由于没有绝对尺度，DPO 训出来的模型<b>没法直接当奖励模型去给单条回答打分并跨 prompt 比较</b>；r̂<sub>θ</sub> 的数值只在同一个 x 内部可比。<span class="conf">置信度 high；推断 —— 这是 Lemma 1 与式 (6) 的直接后果，但原文没有把这句话明说。</span></p>
+</div>
+
+<p class="intu"><span class="lab">直觉 (6)</span>左边是「人会怎么选」，右边<b>只剩策略</b>：真值奖励 r* 不见了，配分函数 Z(x) 不见了。式 (6) 说的是：<b>最优 RLHF 策略必须自己满足一个 Bradley-Terry 式的关系</b> —— 它对两个回答的对数似然比之差（相对于 π<sub>ref</sub>），就是人类偏好的 logit。语言模型不是「有一个奖励模型」，它<b>本身就是</b>那个奖励模型（标题的出处）。</p>
+
+<h3>3.5 第四步：把「最优策略满足的关系」当成拟合目标</h3>
+
+<details class="gloss" open>
+  <summary>式 (7) 新出现的符号 <span class="cnt">· 1 个</span></summary>
+  <div class="gi"><span class="sym">L<sub>DPO</sub>(π<sub>θ</sub>; π<sub>ref</sub>)</span><span class="k k-f">派生</span><span class="d">DPO 损失。形式上就是式 (2)，只是把 r<sub>ϕ</sub> 换成了 β·log(π<sub>θ</sub>/π<sub>ref</sub>)</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr"><span class="eqf"><var class="df">L<sub>DPO</sub></var>(<var class="dv">π<sub>θ</sub></var>; <var class="pm">π<sub>ref</sub></var>) = − E<sub>(x, y<sub>w</sub>, y<sub>l</sub>) ~ D</sub> [ log σ( <var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(<var class="rp">y<sub>w</sub></var>|x) / <var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>w</sub></var>|x)] − <var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(<var class="rp">y<sub>l</sub></var>|x) / <var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>l</sub></var>|x)] ) ]</span><span class="eqn">(7)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (7)</span>把式 (6) 里的 π* 换成参数化的 π<sub>θ</sub>，然后对偏好数据做最大似然 —— 就得到式 (7)。<b>逐字对照式 (2) 看</b>：结构完全相同，只是 logit 从「两个奖励之差」变成了「两个对数似然比之差」。这一步换掉了什么：换掉了整个 RL 阶段和显式奖励模型 —— 剩下的只是一个二分类交叉熵，可以直接反向传播。<b>代价有三条</b>，都必须记住：</p>
+<ul>
+<li><b>把「最优性关系」当「拟合目标」是有条件的等价。</b>式 (6) 描述的是那个非参数意义下的最优 π*；换成 π<sub>θ</sub> 之后，只有在模型类足够大、数据足够多、且 BT 假设成立时，L<sub>DPO</sub> 的最小值才对应真正的 RLHF 最优策略。<span class="conf">置信度 high；推断 —— 原文只说「it enjoys certain theoretical properties, such as consistencies under suitable assumption of the preference data distribution [4]」，并未展开有限模型类下的情形。</span></li>
+<li><b>BT 假设被继承下来了，不是被消掉了。</b>传统 RLHF 把 BT 用在奖励模型那一步，DPO 把它用在策略这一步 —— 两者同样依赖「人类偏好服从 BT」。</li>
+<li><b>π<sub>ref</sub> 必须在训练时可用。</b>每个样本都要算 π<sub>ref</sub> 的对数概率。<span class="conf">置信度 high；推断 —— 这意味着要么常驻第二份模型权重，要么预先缓存全部 log-prob；原文完全没有讨论这项开销，附录 B 的参考实现直接把 ref_logps 当作输入。</span></li>
+</ul>
+
+<h3>3.6 梯度在做什么：一个自适应的样本权重</h3>
+
+<details class="gloss" open>
+  <summary>梯度式（原文未编号）与式 (21)(22) 新出现的符号 <span class="cnt">· 3 个</span></summary>
+  <div class="gi"><span class="sym">r̂<sub>θ</sub>(x, y)</span><span class="k k-f">派生</span><span class="d">DPO 的隐式奖励，r̂<sub>θ</sub>(x, y) = β log[π<sub>θ</sub>(y|x) / π<sub>ref</sub>(y|x)]。附录 B 的参考实现里就是 <code>beta * (pi_logps − ref_logps)</code>，并且做了 detach（不参与反传）</span></div>
+  <div class="gi"><span class="sym">θ</span><span class="k k-d">决</span><span class="d">策略网络的参数，梯度真正更新的对象</span></div>
+  <div class="gi"><span class="sym">u</span><span class="k k-f">派生</span><span class="d">附录 A.4 为链式法则临时引入的记号，等于 σ 的自变量</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr eqh"><span class="eqf">正文第 4 节给出的梯度（原文此式无编号）：</span></div>
+<div class="eqr"><span class="eqf">∇<sub>θ</sub> <var class="df">L<sub>DPO</sub></var>(<var class="dv">π<sub>θ</sub></var>; <var class="pm">π<sub>ref</sub></var>) = − <var class="pm">β</var> E<sub>(x, y<sub>w</sub>, y<sub>l</sub>) ~ D</sub> [ σ( <var class="df">r̂<sub>θ</sub></var>(x, <var class="rp">y<sub>l</sub></var>) − <var class="df">r̂<sub>θ</sub></var>(x, <var class="rp">y<sub>w</sub></var>) ) · ( ∇<sub>θ</sub> log <var class="dv">π</var>(<var class="rp">y<sub>w</sub></var>|x) − ∇<sub>θ</sub> log <var class="dv">π</var>(<var class="rp">y<sub>l</sub></var>|x) ) ]</span><span class="eqn"></span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">σ(·) 那一项原文标注为「higher weight when reward estimate is wrong」；后两项分别标注「increase likelihood of y<sub>w</sub>」「decrease likelihood of y<sub>l</sub>」</span><span class="eqn"></span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">附录 A.4 的推导起点与链式法则（<b>注意：σ 的自变量与上式正负相反</b>）：</span></div>
+<div class="eqr"><span class="eqf">∇<sub>θ</sub> <var class="df">L<sub>DPO</sub></var> = − ∇<sub>θ</sub> E<sub>(x, y<sub>w</sub>, y<sub>l</sub>) ~ D</sub> [ log σ( <var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(<var class="rp">y<sub>l</sub></var>|x)/<var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>l</sub></var>|x)] − <var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(<var class="rp">y<sub>w</sub></var>|x)/<var class="pm">π<sub>ref</sub></var>(<var class="rp">y<sub>w</sub></var>|x)] ) ]</span><span class="eqn">(21)</span></div>
+<div class="eqr"><span class="eqf">∇<sub>θ</sub> <var class="df">L<sub>DPO</sub></var> = − E<sub>(x, y<sub>w</sub>, y<sub>l</sub>) ~ D</sub> [ ( σ′(<var class="df">u</var>) / σ(<var class="df">u</var>) ) ∇<sub>θ</sub>(<var class="df">u</var>) ]</span><span class="eqn">(22)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉（梯度）</span>括号里那两项是最朴素的做法：<b>抬高 y<sub>w</sub> 的概率、压低 y<sub>l</sub> 的概率</b> —— 这正是 Unlikelihood 那一类方法在做的事。DPO 真正多出来的是<b>前面那个 σ(r̂<sub>l</sub> − r̂<sub>w</sub>) 的逐样本权重</b>：当模型已经把 w 排在 l 前面时（r̂<sub>w</sub> ≫ r̂<sub>l</sub>），σ 接近 0，这条样本几乎不产生梯度；当模型把顺序排反了，σ 接近 1，全力更新。<b>建模后果</b>：这是一个自带饱和的目标 —— 它只要求把顺序排对，不奖励把差距无限拉大，因此不会为了刷 margin 而把 π<sub>θ</sub> 推到离 π<sub>ref</sub> 任意远的地方。这就是 KL 约束在 DPO 里的化身：<b>约束没有被扔掉，它变成了梯度上的一个权重</b>（原文原话是这个权重「accounting for the strength of the KL constraint」）。式 (21)(22) 只是把上式重新推一遍的链式法则，没有独立含义，不单配直觉。</p>
+
+<div class="box warn"><p class="t">这个权重被作者称为「degeneration 的防线」，但证据是间接的</p><p>原文说「a naïve version of this method without the weighting coefficient can cause the language model to degenerate (Appendix Table 3)」。而附录 Table 3 的标题是「Unlikelihood samples from TL;DR prompts sampled at temperature 1.0」—— 它展示的是 <b>Unlikelihood 基线</b>的退化样本（连续重复同一个词），<b>不是 DPO 去掉加权系数后的消融实验</b>。两者在梯度形式上确有对应关系（去掉 σ 权重后梯度就退化成 Unlikelihood 那一对项），但 Unlikelihood 还带自己的系数 α、也没有 π<sub>ref</sub> 的对数比值，严格说不是同一个东西。</p></div>
+
+<h3>3.7 为什么这样重参数化「不损失一般性」</h3>
+
+<details class="gloss" open>
+  <summary>式 (8)(9) 与 Definition 1 / Theorem 1 新出现的符号 <span class="cnt">· 3 个</span></summary>
+  <div class="gi"><span class="sym">f(x)</span><span class="k k-p">参</span><span class="d">Definition 1 里的任意函数（只依赖 prompt）。两个奖励函数之差若是这种形式，就属同一等价类</span></div>
+  <div class="gi"><span class="sym">r′(x, y)</span><span class="k k-f">派生</span><span class="d">与 r 同类的另一个奖励函数，r′ = r + f(x)</span></div>
+  <div class="gi"><span class="sym">f(r; π<sub>ref</sub>, β)</span><span class="k k-f">派生</span><span class="d">投影算子（与上面的 f(x) 只是重名）：把任意 r 映到它所在等价类中「配分函数恰为 1」的那个代表元</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr eqh"><span class="eqf">Definition 1（等价关系）：r 与 r′ 等价 ⟺ r(x,y) − r′(x,y) = f(x)。原文此式未编号。</span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">Theorem 1 证明骨架里的投影算子：</span></div>
+<div class="eqr"><span class="eqf"><var class="df">f</var>(<var class="pm">r</var>; <var class="pm">π<sub>ref</sub></var>, <var class="pm">β</var>)(x, y) = <var class="pm">r</var>(x, y) − <var class="pm">β</var> log Σ<sub>y</sub> <var class="pm">π<sub>ref</sub></var>(y | x) exp( (1/<var class="pm">β</var>) <var class="pm">r</var>(x, y) )</span><span class="eqn">(8)</span></div>
+<div class="eqsp"></div>
+<div class="eqr eqh"><span class="eqf">DPO 的重参数化实际上等价于强加下面这条约束：</span></div>
+<div class="eqr"><span class="eqf">Σ<sub>y</sub> <var class="pm">π<sub>ref</sub></var>(y | x) exp( (1/<var class="pm">β</var>) <var class="pm">r</var>(x, y) ) = 1</span><span class="eqn">(9)</span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">原文在被求和项下加了下花括号，标注「= π(y|x), using Thm. 1 reparam.」</span><span class="eqn"></span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (8)</span>式 (8) 就是「减掉 log 配分函数」这一个动作，写成算子形式。因为减掉的量只依赖 x，所以<b>投影后的 r′ 仍在 r 的等价类里</b> —— 这就是 Theorem 1 的全部内容：任何一个奖励函数，都能在它的等价类里找到一个形如 β log(π/π<sub>ref</sub>) 的代表元。<b>建模后果</b>：DPO 的参数化没有把可表示的奖励类变窄，那句必然会被审稿人问的「你这样写是不是把奖励限死了」被提前堵住了。Proposition 1 再补一刀：这样的代表元在每个等价类里<b>唯一</b>（证法是反证 —— 若两个都是合法分布，对 y 求和立即得 exp(f(x)/β) = 1，故 f ≡ 0）。</p>
+
+<p class="intu"><span class="lab">直觉 (9)</span>式 (9) 是同一件事的另一个说法，也是我认为整节最值得记的一句：<b>DPO 挑的不是随便一个代表元，而是「配分函数恰好等于 1」的那一个。</b>Z(x) ≡ 1 意味着式 (4) 的分母消失，最优策略立刻变得<b>解析可写、对所有 prompt 都可算</b> —— 前面那张开不出来的支票，在这里被换成了一张不需要兑现的支票。用原文的话说：施加约束、但保住可表示奖励类不变，同时让最优策略变得 analytically tractable。</p>
+
+<div class="dgm">
+  <div class="node"><p class="nt">奖励函数的世界</p><p class="ns">按 Definition 1 划分成等价类；同类之间只差一个 f(x)。Lemma 1：同类诱导相同的偏好分布。Lemma 2：同类诱导相同的最优策略。</p></div>
+  <div class="pair">
+    <div class="lbl">▼ 由 r 定出策略<br><b>式 (4)</b><br>π<sub>r</sub> = π<sub>ref</sub>·exp(r/β) / Z(x)<br><span class="small">要算 Z(x)，不可行</span></div>
+    <div class="arw">⇵</div>
+    <div class="lbl">▲ 由策略定出奖励<br><b>式 (5)</b><br>r = β log(π<sub>r</sub>/π<sub>ref</sub>) + β log Z(x)<br><span class="small">Z(x) 在 BT 差分里消掉</span></div>
+  </div>
+  <div class="node"><p class="nt">策略的世界</p><p class="ns">每个等价类恰好对应<b>一个</b>形如 β log(π/π<sub>ref</sub>) 的代表元（Theorem 1 + Proposition 1），其配分函数恒为 1（式 (9)）。于是「学奖励」与「学策略」是同一件事。</p></div>
+</div>
+
+<h3>3.8 顺手诊断：actor-critic 为什么不稳</h3>
+
+<div class="eq">
+<div class="eqr"><span class="eqf">max<sub>π<sub>θ</sub></sub> E<sub>π<sub>θ</sub>(y|x)</sub> [ <var class="dv">r<sub>ϕ</sub></var>(x, y) − <var class="pm">β</var> log Σ<sub>y</sub> <var class="pm">π<sub>ref</sub></var>(y|x) exp((1/<var class="pm">β</var>) <var class="dv">r<sub>ϕ</sub></var>(x, y)) − <var class="pm">β</var> log[ <var class="dv">π<sub>θ</sub></var>(y|x) / <var class="pm">π<sub>ref</sub></var>(y|x) ] ]</span><span class="eqn">(10)</span></div>
+<div class="eqr" style="padding-left:1.2em"><span class="eqf">原文在前两项下加下花括号标注 f(r<sub>ϕ</sub>, π<sub>ref</sub>, β)，在第三项下标注 KL</span><span class="eqn"></span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (10)</span>把 5.1 节的框架掉个头用：从最小化 D<sub>KL</sub>[π<sub>θ</sub> ‖ π*] 出发做代数，会得到式 (10)，而它就是 [51][40][1][28] 一直在优化的东西。<b>新意在于对中间那一项的解读</b>：它是<b>参考策略的 soft value function</b>。这一项不影响最优解（它与 y 无关），但把它扔掉会让策略梯度方差变大、训练不稳。前人的补救是学一个 value function（本身也难训）或者用「人类回答」做基线（相当于对归一化项做单样本蒙特卡洛估计）。<b>建模后果</b>：DPO 的重参数化天然让 Z(x) ≡ 1，<b>归一化项恒等于零，因此根本不需要任何基线</b> —— 稳定性不是靠工程 trick 换来的，是形式本身给的。</p>
+
+<div class="box warn"><p class="t">这一节是解释，不是实验</p><p>5.2 节全程是解析论证：「without it, the policy gradient of the objective could have high variance, making learning unstable」用的是 could。<b>原文没有做方差测量实验来验证这条因果</b>；实验部分只报告了最终的奖励-KL 前沿更优，并未把「PPO 更差」拆解到方差这一因素上。</p></div>
+
+<h3>3.9 推广到 Plackett-Luce（K 路排序）</h3>
+
+<details class="gloss" open>
+  <summary>式 (18)(19)(20) 新出现的符号 <span class="cnt">· 3 个</span></summary>
+  <div class="gi"><span class="sym">K</span><span class="k k-p">参</span><span class="d">一个 prompt 下候选答案的个数。K = 2 时 Plackett-Luce 退化为 Bradley-Terry</span></div>
+  <div class="gi"><span class="sym">τ</span><span class="k k-r">随</span><span class="d">标注者给出的排序，是一个置换 τ : [K] → [K]。与 y<sub>w</sub>/y<sub>l</sub> 同理，它是服从式 (18) 的随机输出</span></div>
+  <div class="gi"><span class="sym">k, j</span><span class="k k-s">集</span><span class="d">排序位次的哑标，k 为连乘位次，j 为「第 k 名及其之后」的求和范围</span></div>
+</details>
+
+<div class="eq">
+<div class="eqr"><span class="eqf"><var class="pm">p*</var>(<var class="rp">τ</var> | y<sub>1</sub>, …, y<sub>K</sub>, x) = Π<sub>k=1..K</sub> { exp(<var class="pm">r*</var>(x, y<sub>τ(k)</sub>)) / Σ<sub>j=k..K</sub> exp(<var class="pm">r*</var>(x, y<sub>τ(j)</sub>)) }</span><span class="eqn">(18)</span></div>
+<div class="eqr"><span class="eqf"><var class="pm">p*</var>(<var class="rp">τ</var> | y<sub>1</sub>, …, y<sub>K</sub>, x) = Π<sub>k=1..K</sub> { exp(<var class="pm">β</var> log[<var class="df">π*</var>(y<sub>τ(k)</sub>|x)/<var class="pm">π<sub>ref</sub></var>(y<sub>τ(k)</sub>|x)]) / Σ<sub>j=k..K</sub> exp(<var class="pm">β</var> log[<var class="df">π*</var>(y<sub>τ(j)</sub>|x)/<var class="pm">π<sub>ref</sub></var>(y<sub>τ(j)</sub>|x)]) }</span><span class="eqn">(19)</span></div>
+<div class="eqr"><span class="eqf"><var class="df">L<sub>DPO</sub></var>(<var class="dv">π<sub>θ</sub></var>, <var class="pm">π<sub>ref</sub></var>) = − E<sub><var class="rp">τ</var>, y<sub>1</sub>…y<sub>K</sub>, x ~ D</sub> [ log Π<sub>k=1..K</sub> { exp(<var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(y<sub>τ(k)</sub>|x)/<var class="pm">π<sub>ref</sub></var>(y<sub>τ(k)</sub>|x)]) / Σ<sub>j=k..K</sub> exp(<var class="pm">β</var> log[<var class="dv">π<sub>θ</sub></var>(y<sub>τ(j)</sub>|x)/<var class="pm">π<sub>ref</sub></var>(y<sub>τ(j)</sub>|x)]) } ]</span><span class="eqn">(20)</span></div>
+</div>
+
+<p class="intu"><span class="lab">直觉 (18)–(20)</span>Plackett-Luce 是「依次挑第一名、再从剩下的挑第一名」的分解。<b>它同样只依赖同一个 x 下各答案奖励的相对大小</b>，所以式 (5) 里那个 β log Z(x) 在每一个分式里都同时出现在分子和分母，逐项约掉 —— 与 BT 的机制一字不差。<b>建模后果</b>：DPO 不绑死在成对比较上，有 K 路排序标注时可以直接用式 (20)。<span class="conf">置信度 medium；推断 —— 原文给出了式 (20) 这个目标，但<b>没有对 K &gt; 2 做任何实验</b>，全部实验都是成对偏好。</span></p>
+
+<h3>3.10 算法流程与参考实现</h3>
+
+<div class="dgm">
+  <div class="node"><p class="nt">① 准备偏好数据 D</p><p class="ns">对每个 prompt x 从 π<sub>ref</sub>(· | x) 采样 y<sub>1</sub>, y<sub>2</sub>，交由人标注，得到 D = {(x<sup>(i)</sup>, y<sub>w</sub><sup>(i)</sup>, y<sub>l</sub><sup>(i)</sup>)}<sub>i=1..N</sub>。原文明说实践中<b>更希望直接复用公开偏好数据集</b>，而不是自己采样标注。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">② 确定 π<sub>ref</sub></p><p class="ns">有 π<sup>SFT</sup> 就令 π<sub>ref</sub> = π<sup>SFT</sup>（因为公开偏好数据通常正是从 SFT 模型采的）。没有的话，用被偏好回答做最大似然：π<sub>ref</sub> = arg max<sub>π</sub> E<sub>x, y<sub>w</sub> ~ D</sub>[log π(y<sub>w</sub> | x)]，即论文里的 Preferred-FT。目的是<b>缓解「真实参考分布不可得」造成的分布偏移</b>。</p></div>
+  <div class="arw">↓</div>
+  <div class="node"><p class="nt">③ 最小化 L<sub>DPO</sub></p><p class="ns">给定 π<sub>ref</sub>、D 和 β，直接反向传播式 (7)。<b>无奖励模型、无 RL、训练期间不采样</b>。</p></div>
+</div>
+
+<div class="box ok"><p class="t">参考实现（附录 B）里三个值得注意的细节</p>
+<ul>
+<li>损失写成 <code>-F.logsigmoid(beta * (pi_logratios - ref_logratios))</code>，其中 <code>pi_logratios = pi_yw_logps - pi_yl_logps</code>、<code>ref_logratios = ref_yw_logps - ref_yl_logps</code>。展开后<b>与式 (7) 完全一致</b> —— 这也是判断附录 A.4 那处符号方向为笔误的旁证。</li>
+<li>隐式奖励 <code>rewards = beta * (pi_logps - ref_logps).detach()</code>：带 detach，说明它只用于<b>监控与分析</b>，不参与反向传播。</li>
+<li>函数签名直接把 <code>ref_logps</code> 当输入传进来，<b>参考模型的前向被挪到了损失函数之外</b> —— 这为「预先离线缓存 π<sub>ref</sub> 的 log-prob」留了口子。<span class="conf">置信度 medium；推断 —— 原文只给了代码，没有解释这个接口设计的意图。</span></li>
+</ul>
+</div>
+
+<h2 id="s4"><span class="num">4</span>实验设置与主要结论</h2>
+
+<p>这是 ML 论文，因此按<b>数据集 / 划分 / 超参 / 算力</b>的口径记，不套优化仿真那套。</p>
+
+<h3>4.1 三个任务的设置</h3>
+
+<div class="tbl">
+<table>
+<thead><tr><th>项目</th><th>① 受控情感生成</th><th>② TL;DR 摘要</th><th>③ 单轮对话</th></tr></thead>
+<tbody>
+<tr><td><b>数据集</b></td><td>IMDb 影评 [24]；prompt 为 2–8 token 的前缀</td><td>Reddit TL;DR [43]，人类偏好由 Stiennon et al. [40] 采集</td><td>Anthropic Helpful and Harmless [1]，17 万条人机对话</td></tr>
+<tr><td><b>偏好从哪来</b></td><td>不用人：用预训练情感分类器 <code>siebert/sentiment-roberta-large-english</code> 当真值奖励，按 p(positive|x,y<sub>w</sub>) &gt; p(positive|x,y<sub>l</sub>) 造对</td><td>真人标注（来自 [40]，且是在<b>另一个「相似但不同」的 SFT 模型</b>的样本上采集的）</td><td>真人标注；回答由某个大模型生成（原文写明 although unknown）</td></tr>
+<tr><td><b>偏好对规模</b></td><td>25000 个前缀 × 每个采 4 条 → 每前缀构造 6 对</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td><b>划分</b></td><td>在 IMDB train split 的子集上 SFT 1 个 epoch；在一组 test prompts 上评估</td><td>在 test split 上采样评估</td><td>在 test split 中「只有一步人机交互」的子集上评估</td></tr>
+<tr><td><b>基座 / SFT 模型</b></td><td><code>gpt2-large</code>（原文说用更大的模型是因为默认那些生成质量低、奖励也不准）</td><td>GPT-J-6B [45]，SFT 权重取自 <code>CarperAI/openai_summarize_tldr_sft</code>，用 TRLX [44] 训练；DPO / PPO / Preferred-FT <b>共用同一个 SFT 模型</b></td><td>无现成 SFT 模型：从 Pythia-2.8B [3] 出发，用 Preferred-FT 在被选回答上训一个参考模型</td></tr>
+<tr><td><b>评价方式</b></td><td>奖励-KL 前沿（因为有真值奖励，前沿才可算）；KL 为<b>序列级</b>，即逐时刻 KL 之和</td><td>GPT-4（<code>gpt-4-0314</code>）win rate vs 测试集参考摘要；采样温度 0.0–1.0</td><td>GPT-4 win rate vs 测试集中被选中的回答；采样温度扫描</td></tr>
+<tr><td><b>β</b></td><td>扫 {0.05, 0.1, 1, 5}</td><td class="hl">0.5</td><td>0.1（默认值）</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="tbl">
+<table>
+<thead><tr><th>超参 / 资源（附录 B、C.1）</th><th>取值</th><th>备注</th></tr></thead>
+<tbody>
+<tr><td>β（默认）</td><td>0.1</td><td>TL;DR 改为 0.5，其余不变</td></tr>
+<tr><td>batch size</td><td>64</td><td>—</td></tr>
+<tr><td>优化器</td><td>RMSprop</td><td>不是常见的 AdamW</td></tr>
+<tr><td>学习率</td><td>1e-6</td><td>150 步内从 0 线性 warmup 到 1e-6</td></tr>
+<tr><td>PPO 的保守性超参</td><td>target KL ∈ {3, 6, 9, 12}</td><td>情感实验的扫描范围</td></tr>
+<tr><td>Unlikelihood 系数 α</td><td>{0.05, 0.1, 0.5, 1}</td><td>加在 unlikelihood 项上的可选系数</td></tr>
+<tr><td>情感实验总 run 数</td><td>22</td><td>「This sweep includes 22 runs in total」；每 100 步评估一次直至收敛</td></tr>
+<tr><td>奖励模型训练（情感实验的 PPO 基线用）</td><td>从 <code>gpt2-large</code> 初始化，训 3 个 epoch</td><td>取验证集准确率最高的 checkpoint</td></tr>
+<tr><td>PPO 实现</td><td>TRL 现成版 + 自己改的版本（做了奖励归一化并调参）</td><td>自改版的 batch 为每个 PPO step 1024 个样本</td></tr>
+<tr><td>算力（GPU 型号 / 数量 / 训练时长）</td><td class="n">—</td><td><b>原文未给</b>。致谢里只说 Stanford CRFM「provided part of the compute resources」，没有任何量化信息</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.2 主要结果</h3>
+
+<div class="tbl">
+<table>
+<thead><tr><th>实验</th><th>结论（数字照录）</th></tr></thead>
+<tbody>
+<tr class="hl"><td><b>奖励-KL 前沿（IMDb，图 2 左）</b></td><td>DPO 的前沿「by far the most efficient」：在所有 KL 值上都取得最高期望奖励；<b>严格支配 PPO</b>，甚至优于能拿到真值奖励的 PPO-GT。</td></tr>
+<tr><td>TL;DR 摘要（图 2 右）</td><td>DPO 在温度 0.0 时 win rate <b>约 61%</b>；PPO 在其最佳温度 0.0 时为 <b>57%</b>。DPO 的最高 win rate 也高于 Best of N 基线。</td></tr>
+<tr><td>TL;DR 的温度鲁棒性</td><td>DPO 对采样温度远比 PPO 稳；PPO 在高温下会退化到基座 GPT-J 的水平。Preferred-FT 相对 SFT「does not improve significantly」。</td></tr>
+<tr class="hl"><td><b>人类直接对比（6.4 节）</b></td><td>DPO（温度 0.25）的样本相对 PPO（温度 0）的样本，被人偏好 <b>58%</b>。</td></tr>
+<tr><td>Anthropic HH 对话（图 3 左）</td><td>DPO 是<b>唯一</b>能超过测试集中「被选中回答」的方法，且与算力昂贵的 Best of 128 相当或更好。作者把 Best of 128 当作 PPO 水平的粗略代理。</td></tr>
+<tr><td>训练动态（图 3 右）</td><td>DPO 很快收敛到最好水平，且不同采样温度下都相当稳定；后期有轻微下滑（作者自己在 Limitations 里把它列为待解释现象）。</td></tr>
+<tr><td>Best of N 的饱和（附录 D.1，图 4）</td><td>性能在大约 64–128 个样本之后进入平台期。</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>Table 1（原文）：分布外泛化 —— CNN/DailyMail 新闻文章</h4>
+
+<div class="tbl">
+<table>
+<thead><tr><th>算法</th><th>温度 0</th><th>温度 0.25</th></tr></thead>
+<tbody>
+<tr class="hl"><td><b>DPO</b></td><td class="y">0.36</td><td class="y">0.31</td></tr>
+<tr><td>PPO</td><td>0.26</td><td>0.23</td></tr>
+</tbody>
+</table>
+</div>
+<p class="small">口径：用 TL;DR 上训好的策略直接去做 CNN/DailyMail [26] 测试集，GPT-4 win rate vs 数据集自带的真值摘要；沿用 TL;DR 的最佳温度（0 和 0.25），GPT-4 (C) prompt 中把「forum post」换成「news article」。原文强调 <b>DPO 并没有像 PPO 那样用到额外的无标注 Reddit prompt</b>，却仍然领先。</p>
+
+<h4>Table 2（原文）：GPT-4 当评委靠不靠谱</h4>
+
+<div class="tbl">
+<table>
+<thead><tr><th>指标</th><th>DPO（温度 0.25）</th><th>SFT（温度 0.25）</th><th>PPO-1（温度 1.0）</th></tr></thead>
+<tbody>
+<tr><td>N respondents（原文行标，实为判断条数）</td><td>272</td><td>122</td><td>199</td></tr>
+<tr><td>GPT-4 (S) win %</td><td>47</td><td>27</td><td>13</td></tr>
+<tr><td>GPT-4 (C) win %</td><td>54</td><td>32</td><td>12</td></tr>
+<tr class="hl"><td><b>Human win %</b></td><td class="y">58</td><td class="y">43</td><td class="y">17</td></tr>
+<tr><td>GPT-4 (S) 与人的一致率 %</td><td>70</td><td>77</td><td>86</td></tr>
+<tr><td>GPT-4 (C) 与人的一致率 %</td><td>67</td><td>79</td><td>85</td></tr>
+<tr><td>人与人的一致率 %</td><td>65</td><td class="n">—</td><td>87</td></tr>
+</tbody>
+</table>
+</div>
+<p class="small">三组比较的对照方都是温度 0 的 PPO。人类研究细节（附录 D.3）：25 名志愿者（Stanford 学生 / 近期毕业生 / 访问者，以 CS 为主），每人判 25 条；DPO-PPO 抽 150 组、每组 2 人 → 275 条判断，PPO-PPO 抽 100 组、每组 2 人 → 200 条，SFT 抽 125 组、每组 1 人；<b>忽略被标为平局的判断（约占 1%）</b>，因此表里是 272 / 199 / 122。原文结论：人与 GPT-4 的一致程度，和人与人之间差不多；GPT-4 (C) 的 win rate 更接近人类，故正文主结果用 (C)。</p>
+
+<h3>4.3 可复用的表述方式</h3>
+
+<ol>
+<li><b>「同一个目标，谁优化得更好」</b>（selling point，作者的核心论据）：「DPO and PPO optimize the same objective, but DPO is notably more efficient; DPO's reward/KL tradeoff strictly dominates PPO.」—— 先把评价维度定成二维前沿（奖励 <i>和</i> KL），再说自己支配对方。这比单报一个 win rate 硬得多。</li>
+<li><b>先声明「单看奖励不算数」，再给结果</b>：「achieving slightly higher reward but with much higher KL is not necessarily desirable」。把评价规则写在结果之前，读者就没法怀疑指标是挑出来的。</li>
+<li><b>用「未调参」把结果变成下限</b>（selling point 之二）：「we did not meaningfully tune DPO's β hyperparameter, so these results may underestimate DPO's potential」，以及摘要里的「without … performing significant hyperparameter tuning」。同一件事既当卖点（省事）又当保险（结果只会更好）。</li>
+<li><b>替代基线要自己说破是替代</b>：「we consider Best of 128 a rough proxy for PPO-level performance」—— 因为他们在 HH 上找不到能超过基座的 PPO 模型，与其含糊带过，不如明说这是粗略代理。</li>
+<li><b>证据强度用词分级</b>：「This experiment provides <i>initial evidence</i> that DPO policies can generalize similarly well to PPO policies」；「more comprehensive study is needed」。</li>
+</ol>
+
+<div class="box ok"><p class="t">作者的自我设限，写得得体，值得抄</p>
+<ul>
+<li>「due to limited human raters, we only collect multiple human judgments for the DPO and PPO-1 comparisons」—— 主动交代为什么 SFT 那一列没有人-人一致率，而不是让读者去发现表里那个空格。</li>
+<li>「how does reward over-optimization manifest in the direct preference optimization setting, and <b>is the slight decrease in performance in Figure 3-right an instance of it?</b>」—— 主动把自己图上的不利趋势点名，转写成一个开放问题。</li>
+<li>「while we evaluate models up to 6B parameters, exploration of scaling DPO to state-of-the-art models orders of magnitude larger is an exciting direction for future work」—— 把规模上限说在明处。</li>
+<li>「we find that the win rates computed by GPT-4 are impacted by the prompt」—— 自己承认主要评价指标对提示词敏感，同时用 6.4 节的人类研究把这个弱点补上。</li>
+</ul>
+</div>
+
+<h2 id="s5"><span class="num">5</span>建模贡献在哪里（含我的评估）</h2>
+
+<h3>5.1 作者自述的贡献</h3>
+<p>原文只写了一句正式的贡献声明：「Our main contribution is Direct Preference Optimization (DPO), a simple RL-free algorithm for training language models from preferences.」紧接着补了实验层面的主张：在情感调控、摘要、对话三类任务上，用最大 6B 参数的模型，DPO 至少与包括 PPO-based RLHF 在内的现有方法一样有效。摘要里另有两条工程性主张：微调期间不需要从 LM 采样、不需要显著的超参调优。</p>
+
+<h3>5.2 我的评估</h3>
+
+<div class="tbl">
+<table>
+<thead><tr><th>条目</th><th>评级</th><th>理由</th></tr></thead>
+<tbody>
+<tr class="hl"><td><b>换元：奖励 ↔ 策略的解析映射（式 (4)→(5)→(6)→(7)）</b></td><td><span class="tag">最强</span></td><td>它把两阶段压成一阶段，靠的<b>不是近似，是恒等变形</b>。而且改动量极小：最终的损失和式 (2) 长得一模一样，工程上就是把 r<sub>ϕ</sub> 的输出换成 β·log 比值。「理论上等价 + 实现上更简单」这种组合非常少见，绝大多数简化都要拿性能换。</td></tr>
+<tr><td>Z(x) 在 BT 差分里消掉（式 (6)）</td><td><span class="tag">最强</span></td><td>机械上这是上一条的核心，单列是因为它是唯一一处「困难真正消失而不是被搬走」的地方。前人（[19][15]）在配分函数这里停住并转向了别的路子，本文的贡献本质上是发现<b>根本不需要估它</b>。</td></tr>
+<tr><td>Theorem 1 + Proposition 1（重参数化不损失一般性、且代表元唯一）</td><td><span class="tag">实用</span></td><td>数学上不难（证明各只有几行），但它堵死了「你这样写是不是把奖励类限窄了」这个必然会被问的问题。式 (9) 那句「DPO 选的是配分函数恰为 1 的代表元」是全节最有洞察力的一句 —— 它把一个抽象的等价类论证，落成了一个可以口头讲清楚的机制。</td></tr>
+<tr><td>梯度的自适应权重解释</td><td><span class="tag">实用</span></td><td>它解释了 DPO 和「抬高 y<sub>w</sub>、压低 y<sub>l</sub>」这种朴素做法的差别在哪，也解释了 KL 约束去哪了。但支撑它的实验证据是间接的。</td></tr>
+<tr><td>5.2 节的 actor-critic 不稳定性诊断</td><td><span class="tag">最弱</span></td><td>只是把式 (10) 的归一化项解释成参考策略的 soft value function，然后说「没有它梯度方差可能很大」。<b>全程 could，没有任何方差测量</b>。这一节更像是为了给「DPO 更稳」找一个事后叙事，而不是独立贡献。</td></tr>
+<tr><td>实验规模与基线公平性</td><td><span class="tag">最弱</span></td><td>三个任务，最大 6B；主对比的 PPO 是作者自己的实现（图例写「Our impl.」），虽然情感实验里有 TRL 现成版做对照，但摘要/对话上没有第三方 PPO 对照；算力完全未报告，复现成本无法估计。Plackett-Luce 那条推广（式 (20)）<b>一个实验都没做</b>。</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="box warn"><p class="t">「DPO 与 PPO 优化同一个目标」这句话的适用边界</p>
+<p>严格成立的版本是：<b>在非参数策略类上、且 BT 模型正确时</b>，两者的最优解相同（这正是式 (11) 的前提「general non-parametric policy class」）。有限模型类、有限数据下，二者的解不必相同，收敛行为更不必相同。原文在 6.1 节直接写「DPO and PPO optimize the same objective」而没有复述这个限定，读的时候要自己补上。<span class="conf">置信度 high；推断 —— 这是式 (11) 前提条件的直接后果，但原文没有讨论有限模型类的情形。</span></p>
+<p>另外，「reward/KL tradeoff strictly dominates PPO」这一强结论<b>只在 IMDb 这一个受控小规模设定上成立</b>（gpt2-large，真值奖励是一个情感分类器）。前沿之所以画得出来，正是因为那里有真值奖励；摘要和对话上没有前沿图，只有 win rate。</p>
+</div>
+
+<div class="box warn"><p class="t">「不需要采样」的准确范围</p>
+<p>摘要里的「eliminating the need for sampling from the LM during fine-tuning」是准确的 —— 指的是<b>微调过程中</b>。但完整的 DPO 流程第 ① 步仍然需要从 π<sub>ref</sub> 采样来构造偏好数据；论文的处理办法是直接复用公开偏好数据集，把这一步移出算法本身。这不算名不副实，但引用这句话时要带上「during fine-tuning」这个限定，否则会被理解成「DPO 完全不需要采样」。</p>
+</div>
+
+<footer>
+  <p>整理：Claude Code ｜ 2026-08-10 ｜ 全文 27 页已提取阅读（93751 字符），数字照原文录入，未做四舍五入。<br>
+  PDF 文本层有可恢复的损伤，公式已按上下文重建：求和号 Σ 被抽成字母「P」、连乘号 Π 被抽成字母「Y」、分数线丢失导致分子分母塌成相邻两行、下花括号标注塌成「|{z}」。本笔记中所有分式一律改写为同一行的斜杠形式，Σ / Π 已按上下文还原；式 (1)–(22) 的结构均已回 PDF 核对，其中正文第 4 节的梯度式与附录式 (21)(22) 另用坐标级抽取逐词确认过符号顺序。减号未见丢失。<br>
+  本文件：<code>demo/dpo.html</code> ｜ 原文：<a href="https://arxiv.org/abs/2305.18290">arXiv:2305.18290v3</a>（Rafailov, Sharma, Mitchell, Ermon, Manning, Finn；NeurIPS 2023；<b>CC BY 4.0</b>）<br>
+  凡标注「置信度」「待核实」「推测」处，均为未经二次回源确认的判断，引用前请自行核实。</p>
+</footer>
+
+</div>
+</body>
+</html>
